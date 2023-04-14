@@ -11,7 +11,7 @@ enum RocketState
 
 RocketState currentState = IDLE;
 
-const float LAUNCH_THRESHOLD = 12.5; // Lower threshold acceleration (in m/s^2) to determine launch
+const float LAUNCH_THRESHOLD = 12; // Lower threshold acceleration (in m/s^2) to determine launch
 const float RECOVERY_THRESHOLD = 10.2; // Upper threshold acceleration (in m/s^2) to determine the rocket is landed
 
 // Declare sensor objects
