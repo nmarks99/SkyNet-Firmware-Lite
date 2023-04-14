@@ -12,7 +12,7 @@ enum RocketState
 RocketState currentState = IDLE;
 
 const float LAUNCH_THRESHOLD = 12; // Lower threshold acceleration (in m/s^2) to determine launch
-const float RECOVERY_THRESHOLD = 1; // Upper threshold acceleration (in m/s^2) to determine the rocket is landed
+const float RECOVERY_THRESHOLD = 10.2; // Upper threshold acceleration (in m/s^2) to determine the rocket is landed
 
 // Declare sensor objects
 Adafruit_VL53L0X ToF = Adafruit_VL53L0X(); // time of flight
@@ -210,9 +210,9 @@ bool checkIfLanded()
   }
 
   // Check if acceleration on xyz is smaller than target ms^2
-  return accel_event.acceleration.x < RECOVERY_THRESHOLD &&
-         accel_event.acceleration.y < RECOVERY_THRESHOLD &&
-         accel_event.acceleration.z < RECOVERY_THRESHOLD;
+  return (abs(accel_event.acceleration.x) + 
+          abs(accel_event.acceleration.y) + 
+          abs(accel_event.acceleration.z)) < RECOVERY_THRESHOLD;
   // Placeholder function that always returns false
   return false;
 }
