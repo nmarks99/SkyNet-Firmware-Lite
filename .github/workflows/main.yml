@@ -15,10 +15,6 @@ jobs:
           path: |
             ~/Transmitter/.cache/pip
             ~/Transmitter/.platformio/.cache
-          key: ${{ runner.os }}-pio
-      - uses: actions/cache@v3
-        with:
-          path: |
             ~/Reciever/.cache/pip
             ~/Reciever/.platformio/.cache
           key: ${{ runner.os }}-pio
@@ -29,15 +25,29 @@ jobs:
       - name: Install PlatformIO Core - Reciever
         working-directory: ./Reciever
         run: pip install --upgrade platformio
-
       - name: Build PlatformIO Project - Reciever
         working-directory: ./Reciever
         run: pio run
         
+      - name: Rename firmware.bin to receiver.bin
+        working-directory: ./Reciever
+        run: mv .pio/build/heltec_wifi_lora_32_V2/firmware.bin .pio/build/heltec_wifi_lora_32_V2/receiver.bin
+        
       - name: Install PlatformIO Core - Transmitter
         working-directory: ./Transmitter
         run: pip install --upgrade platformio
-
       - name: Build PlatformIO Project - Transmitter
         working-directory: ./Transmitter
         run: pio run
+        
+      - name: Rename firmware.bin to transmitter.bin
+        working-directory: ./Transmitter
+        run: mv .pio/build/heltec_wifi_lora_32_V2/firmware.bin .pio/build/heltec_wifi_lora_32_V2/transmitter.bin
+        
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            ./Reciever/.pio/build/heltec_wifi_lora_32_V2/receiver.bin
+            ./Transmitter/.pio/build/heltec_wifi_lora_32_V2/transmitter.bin
