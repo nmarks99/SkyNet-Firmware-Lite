@@ -64,6 +64,10 @@ void loop()
     if (returned == 1) {
       SA_STATUS = true;
     }
+    if (returned == 2 || returned == 3) {
+      SA_STATUS = false;
+      SA_COMMAND = false;
+    }
     count++;
     sprintf(msg, "Packet Received: %d", count);
     OLED_print(0, 18, MAX_SCREEN_WIDTH, msg);
