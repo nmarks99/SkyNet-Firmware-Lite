@@ -9,7 +9,7 @@ enum RocketState
   RECOVERY
 };
 
-RocketState currentState = LAUNCHED;
+RocketState currentState = IDLE;
 
 const float LAUNCH_THRESHOLD = 12.5; // Lower threshold acceleration (in m/s^2) to determine launch
 const float RECOVERY_THRESHOLD = 10.2; // Upper threshold acceleration (in m/s^2) to determine the rocket is landed
@@ -49,15 +49,12 @@ void setup(void)
       true /*Serial Enable*/,
       true /*PABOOST Enable*/,
       BAND /*long BAND*/);
-
   Heltec.display->init();
   Heltec.display->flipScreenVertically();
   Heltec.display->setFont(ArialMT_Plain_10);
   Heltec.display->drawString(0, 0, "SkyNet Transmitter Started");
   Heltec.display->display();
-
   delay(1000);          // wait for board to be initialized
-                        //
   LoRa.setSignalBandwidth(500E3);
   Serial.begin(115200); // init serial for testings
   while (!Serial)
@@ -235,69 +232,184 @@ void loop()
   // clear the display
   Heltec.display->clear();
 
-  // Read pressure sensor (float)
-  if (!bmp.performReading())
+  // Update state
+  switch (currentState)
   {
-    return;
+    case IDLE:
+    {
+      long latitude = myGPS.getLatitude();
+      Serial.print(F("Lat: "));
+      Serial.print(latitude);
+      char mystr[40];
+      sprintf(mystr, "Lat: %i", latitude);
+      Heltec.display->drawString(0, 0, mystr);
+
+      long longitude = myGPS.getLongitude();
+      Serial.print(F(" Long: "));
+      Serial.print(longitude);
+      Serial.print(F(" (degrees * 10^-7)"));
+      sprintf(mystr, "Long: %i", longitude);
+      Heltec.display->drawString(0, 10, mystr);
+
+      long altitudeMSL = myGPS.getAltitudeMSL();
+      Serial.print(F(" AltMSL: "));
+      Serial.print(altitudeMSL);
+      Serial.print(F(" (mm)"));
+
+      long altitude = myGPS.getAltitude();
+      Serial.print(F(" Alt: "));
+      Serial.print(altitude);
+      Serial.print(F(" (mm)"));
+      sprintf(mystr, "Alt: %i AltMSL: %i (m)", altitude / 1000, altitudeMSL / 1000);
+      Heltec.display->drawString(0, 20, mystr);
+
+      byte SIV = myGPS.getSIV();
+      Serial.print(F(" SIV: "));
+      Serial.print(SIV);
+      sprintf(mystr, "SIV: %i", SIV);
+      Heltec.display->drawString(0, 30, mystr);
+
+      Serial.print(F("   "));
+      Serial.print(myGPS.getYear());
+      Serial.print(F("-"));
+      Serial.print(myGPS.getMonth());
+      Serial.print(F("-"));
+      Serial.print(myGPS.getDay());
+      Serial.print(F(" "));
+      Serial.print(myGPS.getHour());
+      Serial.print(F(":"));
+      Serial.print(myGPS.getMinute());
+      Serial.print(F(":"));
+      Serial.println(myGPS.getSecond());
+      sprintf(mystr, "%i/%i/%i %i:%i:%i", myGPS.getYear(), myGPS.getMonth(), myGPS.getDay(), myGPS.getHour(), myGPS.getMinute(), myGPS.getSecond());
+      Heltec.display->drawString(0, 40, mystr);
+
+      sprintf(mystr, "SkyNet IDLE - %i", counter);
+      Heltec.display->drawString(0, 50, mystr);
+
+      Serial.println();
+
+      if (counter == 1)
+      {
+        myGPS.disableDebugging(); // Disable the debug messages when counter reaches 1
+      }
+
+      // Check if rocket should be armed
+      if (checkIfArmed())
+      {
+        Serial.println("STATUS CHANGE - ARMED");
+        currentState = ARMED;
+      } else {
+        if (millis() - lastSendTime > interval) {
+          lastSendTime = millis();
+          interval = random(2000) + 1000;    // 1-3 seconds    // Reset last send time
+          sendPacket("IDLE");
+        }
+      }
+      break;
+    }
+
+    case ARMED:
+    {
+      sendPacket("ARMD");
+      char mystr[40];
+
+      // Print SEALEVELPRESSURE_HPA on the screen
+      sprintf(mystr, "Alt-HPA: %i", SEALEVELPRESSURE_HPA);
+      Heltec.display->drawString(0, 40, mystr);
+      sprintf(mystr, "SkyNet ARMED - %i", counter);
+      Heltec.display->drawString(0, 50, mystr);
+      // Check if rocket should be launched
+      if (checkIfLaunched())
+      {
+        // Launch detected!
+        Serial.println(F("STATUS CHANGE - LAUNCHED"));
+        currentState = LAUNCHED;
+      }
+      break;
+    }
+
+    case LAUNCHED:
+    {
+      // Read pressure sensor (float)
+      if (!bmp.performReading())
+      {
+        return;
+      }
+
+      // Read time of flight sensor (unsigned short)
+      VL53L0X_RangingMeasurementData_t val = read_ToF(ToF);
+      uint16_t tof_data = 0;
+      if (val.RangeStatus != 4)
+      {
+        tof_data = val.RangeMilliMeter;
+      }
+      else
+      {
+        // if data is bad (probably nothing in range) set equal to zero
+        tof_data = 0;
+      }
+
+      // Read IMU data (all floats)
+      magnetometer->getEvent(&mag_event);
+      gyroscope->getEvent(&gyro_event);
+      accelerometer->getEvent(&accel_event);
+
+      // Pack up the data into an array
+      char buffer[150];
+      char data_format[] = "%hu,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f";
+
+      sprintf(buffer, data_format,
+              tof_data,
+              bmp.temperature,
+              bmp.pressure,
+              bmp.readAltitude(SEALEVELPRESSURE_HPA),
+              accel_event.acceleration.x,
+              accel_event.acceleration.y,
+              accel_event.acceleration.z,
+              gyro_event.gyro.x,
+              gyro_event.gyro.y,
+              gyro_event.gyro.z,
+              mag_event.magnetic.x,
+              mag_event.magnetic.y,
+              mag_event.magnetic.z);
+
+      float temptemperature = bmp.temperature;
+      float temppressure = bmp.pressure;
+      float tempaltitude = bmp.readAltitude(SEALEVELPRESSURE_HPA);
+
+      LoRa.beginPacket();
+      LoRa.setTxPower(20, RF_PACONFIG_PASELECT_PABOOST);
+      LoRa.write((uint8_t)tof_data);
+      LoRa.write((uint8_t *)&temptemperature, 4);
+      LoRa.write((uint8_t *)&temppressure, 4);
+      LoRa.write((uint8_t *)&tempaltitude, 4);
+      LoRa.write((uint8_t *)&accel_event.acceleration.x, 4);
+      LoRa.write((uint8_t *)&accel_event.acceleration.y, 4);
+      LoRa.write((uint8_t *)&accel_event.acceleration.z, 4);
+      LoRa.write((uint8_t *)&gyro_event.gyro.x, 4);
+      LoRa.write((uint8_t *)&gyro_event.gyro.y, 4);
+      LoRa.write((uint8_t *)&gyro_event.gyro.z, 4);
+      LoRa.write((uint8_t *)&mag_event.magnetic.x, 4);
+      LoRa.write((uint8_t *)&mag_event.magnetic.y, 4);
+      LoRa.write((uint8_t *)&mag_event.magnetic.z, 4);
+      LoRa.endPacket();
+      // Check if rocket has landed
+      if (checkIfLanded())
+      {
+        currentState = RECOVERY;
+      }
+      break;
+    }
+
+    case RECOVERY:
+    {
+      sendPacket("RECY");
+      // Just return to idle state
+      currentState = IDLE;
+      break;
+    }
   }
-
-  // Read time of flight sensor (unsigned short)
-  VL53L0X_RangingMeasurementData_t val = read_ToF(ToF);
-  uint16_t tof_data = 0;
-  if (val.RangeStatus != 4)
-  {
-    tof_data = val.RangeMilliMeter;
-  }
-  else
-  {
-    // if data is bad (probably nothing in range) set equal to zero
-    tof_data = 0;
-  }
-
-  // Read IMU data (all floats)
-  magnetometer->getEvent(&mag_event);
-  gyroscope->getEvent(&gyro_event);
-  accelerometer->getEvent(&accel_event);
-
-  // Pack up the data into an array
-  char buffer[150];
-  char data_format[] = "%hu,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f";
-
-  sprintf(buffer, data_format,
-          tof_data,
-          bmp.temperature,
-          bmp.pressure,
-          bmp.readAltitude(SEALEVELPRESSURE_HPA),
-          accel_event.acceleration.x,
-          accel_event.acceleration.y,
-          accel_event.acceleration.z,
-          gyro_event.gyro.x,
-          gyro_event.gyro.y,
-          gyro_event.gyro.z,
-          mag_event.magnetic.x,
-          mag_event.magnetic.y,
-          mag_event.magnetic.z);
-
-  float temptemperature = bmp.temperature;
-  float temppressure = bmp.pressure;
-  float tempaltitude = bmp.readAltitude(SEALEVELPRESSURE_HPA);
-
-  LoRa.beginPacket();
-  LoRa.setTxPower(20, RF_PACONFIG_PASELECT_PABOOST);
-  LoRa.write((uint8_t)tof_data);
-  LoRa.write((uint8_t *)&temptemperature, 4);
-  LoRa.write((uint8_t *)&temppressure, 4);
-  LoRa.write((uint8_t *)&tempaltitude, 4);
-  LoRa.write((uint8_t *)&accel_event.acceleration.x, 4);
-  LoRa.write((uint8_t *)&accel_event.acceleration.y, 4);
-  LoRa.write((uint8_t *)&accel_event.acceleration.z, 4);
-  LoRa.write((uint8_t *)&gyro_event.gyro.x, 4);
-  LoRa.write((uint8_t *)&gyro_event.gyro.y, 4);
-  LoRa.write((uint8_t *)&gyro_event.gyro.z, 4);
-  LoRa.write((uint8_t *)&mag_event.magnetic.x, 4);
-  LoRa.write((uint8_t *)&mag_event.magnetic.y, 4);
-  LoRa.write((uint8_t *)&mag_event.magnetic.z, 4);
-  LoRa.endPacket();
 
   Heltec.display->display();
   counter++; // Increment counter
