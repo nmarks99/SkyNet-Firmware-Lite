@@ -5,17 +5,16 @@ enum RocketState
 {
   IDLE,
   ARMED,
-  LAUNCHED,
-  RECOVERY
 };
 
+// initial state to IDLE
 RocketState currentState = IDLE;
 
 const float LAUNCH_THRESHOLD = 12.5; // Lower threshold acceleration (in m/s^2) to determine launch
 const float RECOVERY_THRESHOLD = 10.2; // Upper threshold acceleration (in m/s^2) to determine the rocket is landed
 
 // Declare sensor objects
-Adafruit_VL53L0X ToF = Adafruit_VL53L0X(); // time of flight
+// Adafruit_VL53L0X ToF = Adafruit_VL53L0X(); // time of flight
 Adafruit_BMP3XX bmp;                       // pressure
 
 // variables to store IMU data
@@ -56,43 +55,26 @@ void setup(void)
   Heltec.display->display();
   delay(1000);          // wait for board to be initialized
   LoRa.setSignalBandwidth(500E3);
-  Serial.begin(115200); // init serial for testings
-  while (!Serial)
-    delay(10);
+
+  // Serial.begin(115200); // init serial for testings
+  // while (!Serial) {
+  //   delay(10);
+  // }
 
   Heltec.VextON(); // Enable 3.3V Vext
   I2CBUS.begin(13, 22, 100000);
 
-  // Initialize time of flight sensor
-  if (!ToF.begin(0x29, false, &I2CBUS))
-  {
-    Serial.println(F("Failed to boot VL53L0X"));
-    Heltec.display->drawString(0, 10, "Failed to boot VL53L0X");
-    Heltec.display->display();
-    while (1)
-    {
-      ;
-    }
-  }
-  else
-  {
-    Serial.println(F("Booted VL53L0X"));
-    Heltec.display->drawString(0, 10, "Booted VL53L0X");
-    Heltec.display->display();
-  }
-
   // Initialize GPS
   if (myGPS.begin(I2CBUS, 0x42, 1100, false) == false) // Connect to the Ublox module using Wire port
   {
-    Serial.println(F("Failed to find Ublox GPS"));
+    // Serial.println(F("Failed to find Ublox GPS"));
     Heltec.display->drawString(0, 20, "Failed to find Ublox GPS");
     Heltec.display->display();
-    while (1)
-      ;
+    while (1) {;}
   }
   else
   {
-    Serial.println(F("Booted GPS"));
+    // Serial.println(F("Booted GPS"));
     Heltec.display->drawString(0, 20, "Booted GPS");
     Heltec.display->display();
   }
@@ -103,15 +85,14 @@ void setup(void)
   // Initialize BMP388 pressure sensor
   if (!bmp.begin_I2C(0x77, &I2CBUS))
   {
-    Serial.println(F("Failed to boot BMP388"));
+    // Serial.println(F("Failed to boot BMP388"));
     Heltec.display->drawString(0, 30, "Failed to boot BMP388");
     Heltec.display->display();
-    while (1)
-      ;
+    while (1) {;}
   }
   else
   {
-    Serial.println(F("Booted BPM388"));
+    // Serial.println(F("Booted BPM388"));
     Heltec.display->drawString(0, 30, "Booted BPM388");
     Heltec.display->display();
   }
@@ -130,8 +111,9 @@ void setup(void)
     Serial.println(F("Failed to find IMU sensors"));
     Heltec.display->drawString(0, 40, "Failed to find IMU sensors");
     Heltec.display->display();
-    while (1)
+    while (1) {
       delay(10);
+    }
   }
   else
   {
@@ -141,9 +123,9 @@ void setup(void)
   }
 
   // Print out sensor information
-  accelerometer->printSensorDetails();
-  gyroscope->printSensorDetails();
-  magnetometer->printSensorDetails();
+  // accelerometer->printSensorDetails();
+  // gyroscope->printSensorDetails();
+  // magnetometer->printSensorDetails();
 
   setup_sensors();
 
@@ -210,8 +192,8 @@ bool checkIfLanded()
   }
 
   // Check if acceleration on xyz is smaller than target ms^2
-  return (abs(accel_event.acceleration.x) + 
-          abs(accel_event.acceleration.y) + 
+  return (abs(accel_event.acceleration.x) +
+          abs(accel_event.acceleration.y) +
           abs(accel_event.acceleration.z)) < RECOVERY_THRESHOLD;
   // Placeholder function that always returns false
   return false;
@@ -319,18 +301,7 @@ void loop()
       Heltec.display->drawString(0, 40, mystr);
       sprintf(mystr, "SkyNet ARMED - %i", counter);
       Heltec.display->drawString(0, 50, mystr);
-      // Check if rocket should be launched
-      if (checkIfLaunched())
-      {
-        // Launch detected!
-        Serial.println(F("STATUS CHANGE - LAUNCHED"));
-        currentState = LAUNCHED;
-      }
-      break;
-    }
 
-    case LAUNCHED:
-    {
       // Read pressure sensor (float)
       if (!bmp.performReading())
       {
@@ -338,41 +309,12 @@ void loop()
       }
 
       // Read time of flight sensor (unsigned short)
-      VL53L0X_RangingMeasurementData_t val = read_ToF(ToF);
       uint16_t tof_data = 0;
-      if (val.RangeStatus != 4)
-      {
-        tof_data = val.RangeMilliMeter;
-      }
-      else
-      {
-        // if data is bad (probably nothing in range) set equal to zero
-        tof_data = 0;
-      }
 
       // Read IMU data (all floats)
       magnetometer->getEvent(&mag_event);
       gyroscope->getEvent(&gyro_event);
       accelerometer->getEvent(&accel_event);
-
-      // Pack up the data into an array
-      char buffer[150];
-      char data_format[] = "%hu,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f";
-
-      sprintf(buffer, data_format,
-              tof_data,
-              bmp.temperature,
-              bmp.pressure,
-              bmp.readAltitude(SEALEVELPRESSURE_HPA),
-              accel_event.acceleration.x,
-              accel_event.acceleration.y,
-              accel_event.acceleration.z,
-              gyro_event.gyro.x,
-              gyro_event.gyro.y,
-              gyro_event.gyro.z,
-              mag_event.magnetic.x,
-              mag_event.magnetic.y,
-              mag_event.magnetic.z);
 
       float temptemperature = bmp.temperature;
       float temppressure = bmp.pressure;
@@ -394,20 +336,8 @@ void loop()
       LoRa.write((uint8_t *)&mag_event.magnetic.y, 4);
       LoRa.write((uint8_t *)&mag_event.magnetic.z, 4);
       LoRa.endPacket();
-      // Check if rocket has landed
-      if (checkIfLanded())
-      {
-        currentState = RECOVERY;
-      }
-      break;
-    }
 
-    case RECOVERY:
-    {
-      sendPacket("RECY");
-      // Just return to idle state
-      currentState = IDLE;
-      break;
+      // break;
     }
   }
 
