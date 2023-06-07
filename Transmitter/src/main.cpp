@@ -5,27 +5,27 @@ enum RocketState
 {
   IDLE,
   ARMED,
+  CLI
 };
 
 // initial state to IDLE
-RocketState currentState = IDLE;
+RocketState state = IDLE;
 
 const float LAUNCH_THRESHOLD = 12.5; // Lower threshold acceleration (in m/s^2) to determine launch
 const float RECOVERY_THRESHOLD = 10.2; // Upper threshold acceleration (in m/s^2) to determine the rocket is landed
 
 // Declare sensor objects
-// Adafruit_VL53L0X ToF = Adafruit_VL53L0X(); // time of flight
-Adafruit_BMP3XX bmp;                       // pressure
+Adafruit_BMP3XX bmp;
 
-// variables to store IMU data
-Adafruit_Sensor *accelerometer, *gyroscope, *magnetometer; // IMU
+// Variables to store IMU data
+Adafruit_Sensor *accelerometer, *gyroscope, *magnetometer;
 
 // see the the LSM6DS_LIS3MDL file in this project to change board to LSM6DS33, LSM6DS3U, LSM6DSOX, etc
 #include "LSM6DS_LIS3MDL.h"
 sensors_event_t mag_event, gyro_event, accel_event;
 
 // Loop count and time conditions
-unsigned long startTime; // time for loop
+unsigned long start_time; // time for loop
 int loopcount = 0;
 
 // GPS Initilization
@@ -53,19 +53,19 @@ void setup(void)
   Heltec.display->setFont(ArialMT_Plain_10);
   Heltec.display->drawString(0, 0, "SkyNet Transmitter Started");
   Heltec.display->display();
-  delay(1000);          // wait for board to be initialized
+  delay(1000); // wait for board to be initialized
   LoRa.setSignalBandwidth(500E3);
 
-  // Serial.begin(115200); // init serial for testings
-  // while (!Serial) {
-  //   delay(10);
-  // }
+  Serial.begin(115200); // init serial for testings
+  while (!Serial) {
+    delay(10);
+  }
 
   Heltec.VextON(); // Enable 3.3V Vext
-  I2CBUS.begin(13, 22, 100000);
+  I2CBUS.begin(13, 22, 100000); // start I2C bus
 
   // Initialize GPS
-  if (myGPS.begin(I2CBUS, 0x42, 1100, false) == false) // Connect to the Ublox module using Wire port
+  if (myGPS.begin(I2CBUS, 0x42, 1100, false) == false)
   {
     // Serial.println(F("Failed to find Ublox GPS"));
     Heltec.display->drawString(0, 20, "Failed to find Ublox GPS");
@@ -79,7 +79,8 @@ void setup(void)
     Heltec.display->display();
   }
 
-  myGPS.setI2COutput(COM_TYPE_UBX); // Set the I2C port to output UBX only (turn off NMEA noise)
+  // Set the I2C port to output UBX only (turn off NMEA noise)
+  myGPS.setI2COutput(COM_TYPE_UBX);
   myGPS.enableDebugging();
 
   // Initialize BMP388 pressure sensor
@@ -132,7 +133,7 @@ void setup(void)
   Wire.setClock(400000); // 400KHz
 }
 
-bool checkIfArmed()
+bool check_if_armed()
 {
   // Check for incoming packets
   int packetSize = LoRa.parsePacket();
@@ -146,18 +147,21 @@ bool checkIfArmed()
     }
     Serial.print("Incoming LoRa Packet: ");
     Serial.println(packet);
+
     // Check if packet starts with SA (Switchstate Armed)
     if (packet.startsWith("SA"))
     {
       // Switchstate Armed received
       // Get the four characters after SA for SEALEVELPRESSURE_HPA
       String pressure = packet.substring(2, 6);
+
       // Convert to integer
       SEALEVELPRESSURE_HPA = pressure.toInt();
+
       // Print out the new SEALEVELPRESSURE_HPA
       Serial.print("New SEALEVELPRESSURE_HPA: ");
       Serial.println(SEALEVELPRESSURE_HPA);
-      // Return true to indicate that the rocket is armed
+
       return true;
     }
   }
@@ -209,13 +213,13 @@ void sendPacket(String message)
 
 void loop()
 {
-  startTime = millis();
+  start_time = millis();
 
   // clear the display
   Heltec.display->clear();
 
   // Update state
-  switch (currentState)
+  switch (state)
   {
     case IDLE:
     {
@@ -277,10 +281,10 @@ void loop()
       }
 
       // Check if rocket should be armed
-      if (checkIfArmed())
+      if (check_if_armed())
       {
         Serial.println("STATUS CHANGE - ARMED");
-        currentState = ARMED;
+        state = ARMED;
       } else {
         if (millis() - lastSendTime > interval) {
           lastSendTime = millis();
@@ -288,6 +292,7 @@ void loop()
           sendPacket("IDLE");
         }
       }
+
       break;
     }
 
@@ -297,10 +302,10 @@ void loop()
       char mystr[40];
 
       // Print SEALEVELPRESSURE_HPA on the screen
-      sprintf(mystr, "Alt-HPA: %i", SEALEVELPRESSURE_HPA);
-      Heltec.display->drawString(0, 40, mystr);
-      sprintf(mystr, "SkyNet ARMED - %i", counter);
-      Heltec.display->drawString(0, 50, mystr);
+      // sprintf(mystr, "Alt-HPA: %i", SEALEVELPRESSURE_HPA);
+      // Heltec.display->drawString(0, 40, mystr);
+      // sprintf(mystr, "SkyNet ARMED - %i", counter);
+      // Heltec.display->drawString(0, 50, mystr);
 
       // Read pressure sensor (float)
       if (!bmp.performReading())
@@ -309,7 +314,7 @@ void loop()
       }
 
       // Read time of flight sensor (unsigned short)
-      uint16_t tof_data = 0;
+      uint16_t tof_data = 0; // unimplemented
 
       // Read IMU data (all floats)
       magnetometer->getEvent(&mag_event);
@@ -320,6 +325,7 @@ void loop()
       float temppressure = bmp.pressure;
       float tempaltitude = bmp.readAltitude(SEALEVELPRESSURE_HPA);
 
+      // Send all sensor data over LoRa
       LoRa.beginPacket();
       LoRa.setTxPower(20, RF_PACONFIG_PASELECT_PABOOST);
       LoRa.write((uint8_t)tof_data);
@@ -337,14 +343,14 @@ void loop()
       LoRa.write((uint8_t *)&mag_event.magnetic.z, 4);
       LoRa.endPacket();
 
-      // break;
+      break;
     }
   }
 
   Heltec.display->display();
   counter++; // Increment counter
   // Each loop should be at least 20ms.
-  while (millis() - startTime < (DT * 1000))
+  while (millis() - start_time < (DT * 1000))
   {
     // wait
   }

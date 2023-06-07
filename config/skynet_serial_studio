@@ -1,0 +1,104 @@
+{
+    "frameEnd": "",
+    "frameStart": "",
+    "groups": [
+        {
+            "datasets": [
+                {
+                    "alarm": 0,
+                    "fft": false,
+                    "fftSamples": 1024,
+                    "graph": false,
+                    "led": false,
+                    "log": false,
+                    "max": 0,
+                    "min": 0,
+                    "title": "Accelerometer X",
+                    "units": "m/s²",
+                    "value": "%5",
+                    "widget": "x"
+                },
+                {
+                    "alarm": 0,
+                    "fft": false,
+                    "fftSamples": 1024,
+                    "graph": false,
+                    "led": false,
+                    "log": false,
+                    "max": 0,
+                    "min": 0,
+                    "title": "Accelerometer Y",
+                    "units": "m/s²",
+                    "value": "%6",
+                    "widget": "y"
+                },
+                {
+                    "alarm": 0,
+                    "fft": false,
+                    "fftSamples": 1024,
+                    "graph": false,
+                    "led": false,
+                    "log": false,
+                    "max": 0,
+                    "min": 0,
+                    "title": "Accelerometer Z",
+                    "units": "m/s²",
+                    "value": "%7",
+                    "widget": "z"
+                }
+            ],
+            "title": "Accelerometer",
+            "widget": "accelerometer"
+        },
+        {
+            "datasets": [
+                {
+                    "alarm": 0,
+                    "fft": false,
+                    "fftSamples": 1024,
+                    "graph": false,
+                    "led": false,
+                    "log": false,
+                    "max": 0,
+                    "min": 0,
+                    "title": "Gyro Roll",
+                    "units": "°",
+                    "value": "%8",
+                    "widget": "roll"
+                },
+                {
+                    "alarm": 0,
+                    "fft": false,
+                    "fftSamples": 1024,
+                    "graph": false,
+                    "led": false,
+                    "log": false,
+                    "max": 0,
+                    "min": 0,
+                    "title": "Gyro Pitch",
+                    "units": "°",
+                    "value": "%9",
+                    "widget": "pitch"
+                },
+                {
+                    "alarm": 0,
+                    "fft": false,
+                    "fftSamples": 1024,
+                    "graph": false,
+                    "led": false,
+                    "log": false,
+                    "max": 0,
+                    "min": 0,
+                    "title": "Gyro Yaw",
+                    "units": "°",
+                    "value": "%10",
+                    "widget": "yaw"
+                }
+            ],
+            "title": "Gyroscope",
+            "widget": "gyro"
+        }
+    ],
+    "separator": "",
+    "title": "SkyNet Groundstation"
+}
