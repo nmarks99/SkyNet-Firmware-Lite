@@ -1,6 +1,6 @@
-#include "cli.hpp"
+#include "utils.hpp"
 
-namespace cli {
+namespace utils {
 
     std::string trim_string(const std::string &str) {
         size_t first = str.find_first_not_of(" \t\n\r");

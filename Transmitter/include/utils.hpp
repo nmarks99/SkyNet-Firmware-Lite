@@ -1,9 +1,9 @@
 #include <string>
 #include <vector>
 
-namespace cli {
+namespace utils {
 
-    // Removes leading and trailing whitespace,\r,\n,\t from string
+    // Removes leading and trailing whitespace, tab, and newline from string
     std::string trim_string(const std::string &str);
 
     // Splits a string into a vector of strings by the delimiter
