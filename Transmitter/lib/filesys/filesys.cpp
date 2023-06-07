@@ -49,6 +49,22 @@ namespace fs {
         file.close();
     }
 
+    void write_file(fs::FS &fs, const char * path, const char * message){
+        Serial.printf("Writing file: %s\r\n", path);
+
+        File file = fs.open(path, FILE_WRITE);
+        if(!file){
+            Serial.println("- failed to open file for writing");
+            return;
+        }
+        if(file.print(message)){
+            Serial.println("- file written");
+        } else {
+            Serial.println("- write failed");
+        }
+        file.close();
+    }
+
     void append_file(fs::FS &fs, const char * path, const char * message){
         Serial.printf("Appending to file: %s\r\n", path);
 
@@ -64,6 +80,17 @@ namespace fs {
         }
         file.close();
     }
+
+    void delete_file(fs::FS &fs, const char * path) {
+        Serial.printf("Deleting file: %s\r\n", path);
+        if(fs.remove(path)){
+            Serial.println("- file deleted");
+        } else {
+            Serial.println("- delete failed");
+        }
+    }
+
+
 
 }
 

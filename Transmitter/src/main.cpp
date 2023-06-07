@@ -204,8 +204,7 @@ void lora_task(void *params)
 
                     // cat: print the contents of a file to the screen
                     else if (cmd == "cat") {
-                        if (input_vec.size() == 2)
-                        {
+                        if (input_vec.size() == 2) {
                             std::string arg = input_vec.at(1);
                             arg.insert(0, "/");
                             fs::read_file(SPIFFS, arg.c_str());
@@ -215,16 +214,29 @@ void lora_task(void *params)
                         }
                     }
 
+                    else if (cmd == "rm") {
+                        if (input_vec.size() == 2) {
+                            std::string arg = input_vec.at(1);
+                            arg.insert(0, "/");
+                            fs::delete_file(SPIFFS, arg.c_str());
+                        }
+                        else {
+                            Serial.println("No argument passed to rm command");
+                        }
+                    }
+
                     // help: print a help message
                     else if (cmd == "help") {
                         Serial.print("\n"
-                                     "------------------------\n"
-                                     " SkyNet Transmitter CLI \n"
-                                     "------------------------\n"
-                                     "---Available Commands---\n"
-                                     "ls: list all files\n"
-                                     "cat: print the contents of the specified file to the screen\n"
-                                     "help: print this help message to this screen\n\n");
+                            "------------------------\n"
+                            " SkyNet Transmitter CLI \n"
+                            "------------------------\n"
+                            "---Available Commands---\n"
+                            "ls: list all files\n"
+                            "cat: print the contents of the specified file to the screen\n"
+                            "rm: permanantly delete the specified file\n"
+                            "help: print this help message to this screen\n\n"
+                        );
                     }
 
                     else {
