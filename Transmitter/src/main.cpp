@@ -51,6 +51,7 @@ volatile int32_t latitude = 0;
 volatile int32_t longitude = 0;
 
 float altitude_zero = 0.0;  // used to zero the altitude at ground level
+bool CLI_START = true;
 
 static SemaphoreHandle_t mutex;
 static SemaphoreHandle_t mutex_gps;
@@ -114,19 +115,29 @@ void main_loop(void *params) {
     while (1) {
         switch (state) {
             case (IDLE): {
+                if (Serial.available()) {
+                    char rec = Serial.read();
+                    if (rec == 'c') {
+                        Heltec.display->clear();
+                        Heltec.display->drawString(0, 0, "Serial CLI Mode");
+                        Heltec.display->display();
+                        state = CLI;
+                    }
+                }
+
                 Heltec.display->clear();
                 char buff[40];
 
                 Heltec.display->drawString(0, 0, "IDLE");
 
-                // if (xSemaphoreTake(mutex_gps, 0) == pdTRUE) {
-                //     tmp_latitude = latitude;
-                //     tmp_longitude = longitude;
-                //     Serial.print(latitude);
-                //     Serial.print(", ");
-                //     Serial.print(longitude);
-                //     xSemaphoreGive(mutex_gps);
-                // }
+                if (xSemaphoreTake(mutex_gps, 0) == pdTRUE) {
+                    tmp_latitude = latitude;
+                    tmp_longitude = longitude;
+                    Serial.print(latitude);
+                    Serial.print(", ");
+                    Serial.print(longitude);
+                    xSemaphoreGive(mutex_gps);
+                }
 
                 sprintf(buff, "Lat: %i", tmp_latitude);
                 Heltec.display->drawString(0, 20, buff);
@@ -215,6 +226,12 @@ void main_loop(void *params) {
             case (CLI): {
                 constexpr int BUFF_SIZE = 50;
                 char cmd_buff[BUFF_SIZE];
+                if (CLI_START) {
+                    Heltec.display->clear();
+                    Heltec.display->drawString(0, 0, "Serial CLI Mode");
+                    Heltec.display->display();
+                    CLI_START = false;
+                }
                 vTaskDelay(100 / portTICK_PERIOD_MS);
 
                 if (Serial.available()) {
@@ -317,34 +334,37 @@ void sensor_task(void *params) {
                 mag_y = mag_event.magnetic.y;
                 mag_z = mag_event.magnetic.z;
 
-                char data_fmt[] = "%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n";
-                sprintf(data_buff, data_fmt,
-                        0,
-                        temperature,
-                        pressure,
-                        altitude,
-                        acc_x,
-                        acc_y,
-                        acc_z,
-                        gyro_x,
-                        gyro_y,
-                        gyro_z,
-                        mag_x,
-                        mag_y,
-                        mag_z);
-                Serial.print(data_buff);
-
                 xSemaphoreGive(mutex);
 
                 if (state == IDLE) {
                     vTaskDelay(500 / portTICK_PERIOD_MS);
-                } else if (state == ARMED) {
-                    vTaskDelay(50 / portTICK_PERIOD_MS);
                 }
 
-            } else {
-                // do something else?
+                // Save to a file fast if in ARMED state
+                else if (state == ARMED) {
+                    char data_fmt[] = "%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\r\n";
+                    sprintf(data_buff, data_fmt,
+                            0,
+                            temperature,
+                            pressure,
+                            altitude,
+                            acc_x,
+                            acc_y,
+                            acc_z,
+                            gyro_x,
+                            gyro_y,
+                            gyro_z,
+                            mag_x,
+                            mag_y,
+                            mag_z);
+
+                    // append data to to a file (this gets slower as the file grows)
+                    fs::append_file(SPIFFS, "/data.csv", data_buff);
+
+                    vTaskDelay(SENSOR_POLL_PERIOD_MS / portTICK_PERIOD_MS);
+                }
             }
+
         } else {
             // delete the task if in CLI mode
             vTaskDelete(NULL);  // UNTESTED
@@ -359,8 +379,8 @@ void gps_task(void *params) {
             latitude = myGPS.getLatitude();
             longitude = myGPS.getLongitude();
             xSemaphoreGive(mutex_gps);
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
+        vTaskDelay(GPS_POLL_PERIOD_MS / portTICK_PERIOD_MS);
     }
 }
 
@@ -488,14 +508,14 @@ void setup(void) {
     );
 
     // Create a task for reading from the GPS
-    // xTaskCreate(
-    //     gps_task,    // function
-    //     "GPS task",  // task name
-    //     4096,        // stack size
-    //     NULL,        // task parameters
-    //     1,           // task priority
-    //     NULL         // task handle
-    // );
+    xTaskCreate(
+        gps_task,    // function
+        "GPS task",  // task name
+        4096,        // stack size
+        NULL,        // task parameters
+        1,           // task priority
+        NULL         // task handle
+    );
 }
 
 void loop() {}

@@ -14,6 +14,8 @@
 #define BAND 915E6  // You can set band here directly,e.g. 868E6,915E6
 int SEALEVELPRESSURE_HPA = 1013;
 constexpr float FEET_PER_METER = 3.280839895;
+constexpr uint16_t SENSOR_POLL_PERIOD_MS = 20;  // time in ms between each sensor read
+constexpr uint16_t GPS_POLL_PERIOD_MS = 1000;   // probably can be even slower
 
 // #define DT 0.02       // Loop time
 // #define AA 0.97       // complementary filter constant
