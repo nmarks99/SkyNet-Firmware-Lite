@@ -148,20 +148,14 @@ void main_loop(void *params) {
                 //     myGPS.getYear(), myGPS.getMonth(), myGPS.getDay(), myGPS.getHour(), myGPS.getMinute(), myGPS.getSecond());
                 // Heltec.display->drawString(0, 30, buff);
 
-                // sprintf(buff, "SkyNet IDLE: %i", counter);
-
                 Heltec.display->display();  // display all the above display calls
 
                 // Check if rocket should be armed
                 if (check_if_armed()) {
                     // Serial.println("STATUS CHANGE - ARMED");
                     altitude_zero = tmp_altitude;
-                    sprintf(buff, "Zero Altitude = %f", altitude_zero);
-                    Heltec.display->clear();
-                    Heltec.display->drawString(0, 0, "ARMED");
-                    Heltec.display->drawString(0, 20, buff);
-                    Heltec.display->display();
-                    // Heltec.display->displayOff();
+                    vTaskDelay(500 / portTICK_PERIOD_MS);  // need this to work
+                    Heltec.display->displayOff();
                     sendPacket("ARMD");
                     state = ARMED;
                 } else {
