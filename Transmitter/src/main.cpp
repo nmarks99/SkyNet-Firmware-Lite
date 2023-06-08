@@ -34,6 +34,8 @@ long lastSendTime = 0;  // last send time
 int interval = 2000;    // interval between sends
 bool led_flag = 0;
 
+float altitude_zero = 0.0;
+
 // Global variables to store sensor data
 volatile float pressure = 0.0;
 volatile float temperature = 0.0;
@@ -95,7 +97,18 @@ void sendPacket(String message) {
 }
 
 void main_loop(void *params) {
+    float tmp_pressure = 0.0;
+    float tmp_temperature = 0.0;
     float tmp_altitude = 0.0;
+    float tmp_gyro_x = 0.0;
+    float tmp_gyro_y = 0.0;
+    float tmp_gyro_z = 0.0;
+    float tmp_acc_x = 0.0;
+    float tmp_acc_y = 0.0;
+    float tmp_acc_z = 0.0;
+    float tmp_mag_x = 0.0;
+    float tmp_mag_y = 0.0;
+    float tmp_mag_z = 0.0;
     int32_t tmp_latitude = 0;
     int32_t tmp_longitude = 0;
     while (1) {
@@ -126,7 +139,7 @@ void main_loop(void *params) {
                     xSemaphoreGive(mutex);
                 }
 
-                sprintf(buff, "Altitude: %.2f m", tmp_altitude);
+                sprintf(buff, "Altitude: %.2f ft", tmp_altitude);
                 Heltec.display->drawString(0, 40, buff);
 
                 // sprintf(
@@ -142,8 +155,11 @@ void main_loop(void *params) {
                 // Check if rocket should be armed
                 if (check_if_armed()) {
                     // Serial.println("STATUS CHANGE - ARMED");
+                    // Heltec.display->clear();
+                    Heltec.display->displayOff();
+                    sendPacket("ARMD");
+                    altitude_zero = tmp_altitude;
                     state = ARMED;
-                    Heltec.display->clear();
                 } else {
                     if (millis() - lastSendTime > interval) {
                         lastSendTime = millis();
@@ -151,14 +167,30 @@ void main_loop(void *params) {
                         sendPacket("IDLE");
                     }
                 }
-                vTaskDelay(50 / portTICK_PERIOD_MS);
+                vTaskDelay(500 / portTICK_PERIOD_MS);
                 break;
             }
 
             case (ARMED): {
-                sendPacket("ARMD");
-
+                bool new_data = false;
                 if (xSemaphoreTake(mutex, 0) == pdTRUE) {
+                    tmp_altitude = std::abs(altitude - altitude_zero);
+                    tmp_temperature = temperature;
+                    tmp_altitude = altitude;
+                    tmp_acc_x = acc_x;
+                    tmp_acc_y = acc_y;
+                    tmp_acc_z = acc_z;
+                    tmp_gyro_x = gyro_x;
+                    tmp_gyro_y = gyro_y;
+                    tmp_gyro_z = gyro_z;
+                    tmp_mag_x = mag_x;
+                    tmp_mag_y = mag_y;
+                    tmp_mag_z = mag_z;
+                    xSemaphoreGive(mutex);
+                    new_data = true;
+                }
+
+                if (new_data) {
                     // Send all sensor data over LoRa
                     LoRa.beginPacket();
                     LoRa.setTxPower(20, RF_PACONFIG_PASELECT_PABOOST);
@@ -176,12 +208,9 @@ void main_loop(void *params) {
                     LoRa.write((uint8_t *)&mag_y, 4);
                     LoRa.write((uint8_t *)&mag_z, 4);
                     LoRa.endPacket();
-
-                    xSemaphoreGive(mutex);
-                    vTaskDelay(20 / portTICK_PERIOD_MS);
-                } else {
-                    // do something else
                 }
+                vTaskDelay(10 / portTICK_PERIOD_MS);
+
                 break;
             }
 
@@ -256,7 +285,6 @@ void main_loop(void *params) {
                 break;
             }
         }
-        // vTaskDelay(50 / portTICK_PERIOD_MS);
         // counter++;
     }
 }
@@ -267,7 +295,6 @@ void sensor_task(void *params) {
     while (1) {
         if (state != CLI) {
             if (xSemaphoreTake(mutex, 0) == pdTRUE) {
-                // LED heartbeat
                 led_flag = 1 ^ led_flag;
                 digitalWrite(LED_BUILTIN, led_flag);
 
@@ -278,7 +305,8 @@ void sensor_task(void *params) {
                 // Store BMP data
                 temperature = bmp.temperature;
                 pressure = bmp.pressure;
-                altitude = bmp.readAltitude(SEALEVELPRESSURE_HPA);
+                float altitude_m = bmp.readAltitude(SEALEVELPRESSURE_HPA);
+                altitude = altitude_m * FEET_PER_METER;  // convert to feet
 
                 // read IMU
                 magnetometer->getEvent(&mag_event);
@@ -310,14 +338,22 @@ void sensor_task(void *params) {
                         mag_x,
                         mag_y,
                         mag_z);
-                // Serial.print(data_buff);
+                Serial.print(data_buff);
 
                 xSemaphoreGive(mutex);
 
-                vTaskDelay(100 / portTICK_PERIOD_MS);
+                if (state == IDLE) {
+                    vTaskDelay(500 / portTICK_PERIOD_MS);
+                } else if (state == ARMED) {
+                    vTaskDelay(50 / portTICK_PERIOD_MS);
+                }
+
             } else {
                 // do something else?
             }
+        } else {
+            // delete the task if in CLI mode
+            vTaskDelete(NULL);  // UNTESTED
         }
     }
 }
@@ -329,7 +365,7 @@ void gps_task(void *params) {
             latitude = myGPS.getLatitude();
             longitude = myGPS.getLongitude();
             xSemaphoreGive(mutex_gps);
-            // vTaskDelay(1000 / portTICK_PERIOD_MS);
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
     }
 }
@@ -443,7 +479,7 @@ void setup(void) {
         "Main loop",  // task name
         4096,         // stack size
         NULL,         // task parameters
-        1,            // task priority
+        2,            // task priority
         NULL          // task handle
     );
 
