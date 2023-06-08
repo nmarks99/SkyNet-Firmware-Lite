@@ -215,70 +215,66 @@ void main_loop(void *params) {
             case (CLI): {
                 constexpr int BUFF_SIZE = 50;
                 char cmd_buff[BUFF_SIZE];
-                Serial.print("> ");
+                vTaskDelay(100 / portTICK_PERIOD_MS);
 
-                while (1) {
-                    vTaskDelay(100 / portTICK_PERIOD_MS);
-                    // while (not Serial.available());
-                    if (Serial.available()) {
-                        // read input from user and convert to a std::string
-                        size_t bytes_read = Serial.readBytesUntil('\n', cmd_buff, BUFF_SIZE);
-                        cmd_buff[bytes_read] = '\0';  // I think std::string wants the \0
-                        std::string in_string = std::string(cmd_buff, std::strlen(cmd_buff));
-                        in_string = utils::trim_string(in_string);  // trim whitespace
-                        Serial.println(in_string.c_str());          // echo command back to user
+                if (Serial.available()) {
+                    // read input from user and convert to a std::string
+                    size_t bytes_read = Serial.readBytesUntil('\n', cmd_buff, BUFF_SIZE);
+                    cmd_buff[bytes_read] = '\0';  // I think std::string wants the \0
+                    std::string in_string = std::string(cmd_buff, std::strlen(cmd_buff));
+                    in_string = utils::trim_string(in_string);  // trim whitespace
+                    Serial.println(in_string.c_str());          // echo command back to user
 
-                        // split the string by spaces into a vector<string>
-                        std::vector<std::string> input_vec = utils::split_string(in_string, ' ');
-                        std::string cmd = input_vec.at(0);  // first is the command itself
+                    // split the string by spaces into a vector<string>
+                    std::vector<std::string> input_vec = utils::split_string(in_string, ' ');
+                    std::string cmd = input_vec.at(0);  // first is the command itself
 
-                        // ls: list contents of the root directory
-                        if (cmd == "ls") {
-                            fs::list_dir(SPIFFS, "/", 0);
-                        }
-
-                        // cat: print the contents of a file to the screen
-                        else if (cmd == "cat") {
-                            if (input_vec.size() == 2) {
-                                std::string arg = input_vec.at(1);
-                                arg.insert(0, "/");
-                                fs::read_file(SPIFFS, arg.c_str());
-                            } else {
-                                Serial.println("No argument passed to cat command");
-                            }
-                        }
-
-                        else if (cmd == "rm") {
-                            if (input_vec.size() == 2) {
-                                std::string arg = input_vec.at(1);
-                                arg.insert(0, "/");
-                                fs::delete_file(SPIFFS, arg.c_str());
-                            } else {
-                                Serial.println("No argument passed to rm command");
-                            }
-                        }
-
-                        // help: print a help message
-                        else if (cmd == "help") {
-                            Serial.print(
-                                "\n"
-                                "------------------------\n"
-                                " SkyNet Transmitter CLI \n"
-                                "------------------------\n"
-                                "---Available Commands---\n"
-                                "ls: list all files\n"
-                                "cat: print the contents of the specified file to the screen\n"
-                                "rm: permanantly delete the specified file\n"
-                                "help: print this help message to this screen\n\n");
-                        }
-
-                        else {
-                            Serial.print("Unknown command ");
-                            Serial.println(cmd.c_str());
-                        }
-
-                        Serial.print("> ");
+                    // ls: list contents of the root directory
+                    if (cmd == "ls") {
+                        fs::list_dir(SPIFFS, "/", 0);
                     }
+
+                    // cat: print the contents of a file to the screen
+                    else if (cmd == "cat") {
+                        if (input_vec.size() == 2) {
+                            std::string arg = input_vec.at(1);
+                            arg.insert(0, "/");
+                            fs::read_file(SPIFFS, arg.c_str());
+                        } else {
+                            Serial.println("No argument passed to cat command");
+                        }
+                    }
+
+                    else if (cmd == "rm") {
+                        if (input_vec.size() == 2) {
+                            std::string arg = input_vec.at(1);
+                            arg.insert(0, "/");
+                            fs::delete_file(SPIFFS, arg.c_str());
+                        } else {
+                            Serial.println("No argument passed to rm command");
+                        }
+                    }
+
+                    // help: print a help message
+                    else if (cmd == "help") {
+                        Serial.print(
+                            "\n"
+                            "------------------------\n"
+                            " SkyNet Transmitter CLI \n"
+                            "------------------------\n"
+                            "---Available Commands---\n"
+                            "ls: list all files\n"
+                            "cat: print the contents of the specified file to the screen\n"
+                            "rm: permanantly delete the specified file\n"
+                            "help: print this help message to this screen\n\n");
+                    }
+
+                    else {
+                        Serial.print("Unknown command ");
+                        Serial.println(cmd.c_str());
+                    }
+
+                    Serial.print("> ");
                 }
                 break;
             }
