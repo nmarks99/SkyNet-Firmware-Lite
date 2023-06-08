@@ -8,7 +8,7 @@ enum RocketState {
 };
 
 // initial state to IDLE
-RocketState state = IDLE;
+RocketState state = ARMED;
 
 // Declare sensor objects
 Adafruit_BMP3XX bmp;
@@ -104,20 +104,22 @@ void main_loop(void *params) {
                 Heltec.display->clear();
                 char buff[40];
 
-                if (xSemaphoreTake(mutex_gps, 0) == pdTRUE) {
-                    tmp_latitude = latitude;
-                    tmp_longitude = longitude;
-                    Serial.print(latitude);
-                    Serial.print(", ");
-                    Serial.print(longitude);
-                    xSemaphoreGive(mutex_gps);
-                }
+                Heltec.display->drawString(0, 0, "IDLE");
+
+                // if (xSemaphoreTake(mutex_gps, 0) == pdTRUE) {
+                //     tmp_latitude = latitude;
+                //     tmp_longitude = longitude;
+                //     Serial.print(latitude);
+                //     Serial.print(", ");
+                //     Serial.print(longitude);
+                //     xSemaphoreGive(mutex_gps);
+                // }
 
                 sprintf(buff, "Lat: %i", tmp_latitude);
-                Heltec.display->drawString(0, 0, buff);
+                Heltec.display->drawString(0, 20, buff);
 
                 sprintf(buff, "Long: %i", tmp_longitude);
-                Heltec.display->drawString(0, 10, buff);
+                Heltec.display->drawString(0, 30, buff);
 
                 if (xSemaphoreTake(mutex, 0) == pdTRUE) {
                     tmp_altitude = altitude;
@@ -125,7 +127,7 @@ void main_loop(void *params) {
                 }
 
                 sprintf(buff, "Altitude: %.2f m", tmp_altitude);
-                Heltec.display->drawString(0, 20, buff);
+                Heltec.display->drawString(0, 40, buff);
 
                 // sprintf(
                 //     buff,
@@ -133,8 +135,7 @@ void main_loop(void *params) {
                 //     myGPS.getYear(), myGPS.getMonth(), myGPS.getDay(), myGPS.getHour(), myGPS.getMinute(), myGPS.getSecond());
                 // Heltec.display->drawString(0, 30, buff);
 
-                sprintf(buff, "SkyNet IDLE: %i", counter);
-                Heltec.display->drawString(0, 40, buff);
+                // sprintf(buff, "SkyNet IDLE: %i", counter);
 
                 Heltec.display->display();  // display all the above display calls
 
@@ -157,24 +158,30 @@ void main_loop(void *params) {
             case (ARMED): {
                 sendPacket("ARMD");
 
-                // Send all sensor data over LoRa
-                LoRa.beginPacket();
-                LoRa.setTxPower(20, RF_PACONFIG_PASELECT_PABOOST);
-                LoRa.write((uint8_t)0);
-                LoRa.write((uint8_t *)&temperature, 4);
-                LoRa.write((uint8_t *)&pressure, 4);
-                LoRa.write((uint8_t *)&altitude, 4);
-                LoRa.write((uint8_t *)&accel_event.acceleration.x, 4);
-                LoRa.write((uint8_t *)&accel_event.acceleration.y, 4);
-                LoRa.write((uint8_t *)&accel_event.acceleration.z, 4);
-                LoRa.write((uint8_t *)&gyro_event.gyro.x, 4);
-                LoRa.write((uint8_t *)&gyro_event.gyro.y, 4);
-                LoRa.write((uint8_t *)&gyro_event.gyro.z, 4);
-                LoRa.write((uint8_t *)&mag_event.magnetic.x, 4);
-                LoRa.write((uint8_t *)&mag_event.magnetic.y, 4);
-                LoRa.write((uint8_t *)&mag_event.magnetic.z, 4);
-                LoRa.endPacket();
+                if (xSemaphoreTake(mutex, 0) == pdTRUE) {
+                    // Send all sensor data over LoRa
+                    LoRa.beginPacket();
+                    LoRa.setTxPower(20, RF_PACONFIG_PASELECT_PABOOST);
+                    LoRa.write((uint8_t)0);
+                    LoRa.write((uint8_t *)&temperature, 4);
+                    LoRa.write((uint8_t *)&pressure, 4);
+                    LoRa.write((uint8_t *)&altitude, 4);
+                    LoRa.write((uint8_t *)&acc_x, 4);
+                    LoRa.write((uint8_t *)&acc_y, 4);
+                    LoRa.write((uint8_t *)&acc_z, 4);
+                    LoRa.write((uint8_t *)&gyro_x, 4);
+                    LoRa.write((uint8_t *)&gyro_y, 4);
+                    LoRa.write((uint8_t *)&gyro_z, 4);
+                    LoRa.write((uint8_t *)&mag_x, 4);
+                    LoRa.write((uint8_t *)&mag_y, 4);
+                    LoRa.write((uint8_t *)&mag_z, 4);
+                    LoRa.endPacket();
 
+                    xSemaphoreGive(mutex);
+                    vTaskDelay(20 / portTICK_PERIOD_MS);
+                } else {
+                    // do something else
+                }
                 break;
             }
 
@@ -250,13 +257,13 @@ void main_loop(void *params) {
             }
         }
         // vTaskDelay(50 / portTICK_PERIOD_MS);
-        counter++;
+        // counter++;
     }
 }
 
 // read from sensors and update values
 void sensor_task(void *params) {
-    char data_buff[100];
+    char data_buff[200];
     while (1) {
         if (state != CLI) {
             if (xSemaphoreTake(mutex, 0) == pdTRUE) {
@@ -451,14 +458,14 @@ void setup(void) {
     );
 
     // Create a task for reading from the GPS
-    xTaskCreate(
-        gps_task,    // function
-        "GPS task",  // task name
-        4096,        // stack size
-        NULL,        // task parameters
-        1,           // task priority
-        NULL         // task handle
-    );
+    // xTaskCreate(
+    //     gps_task,    // function
+    //     "GPS task",  // task name
+    //     4096,        // stack size
+    //     NULL,        // task parameters
+    //     1,           // task priority
+    //     NULL         // task handle
+    // );
 }
 
 void loop() {}
