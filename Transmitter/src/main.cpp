@@ -94,26 +94,38 @@ void sendPacket(String message) {
     LoRa.endPacket();
 }
 
-void lora_task(void *params) {
+void main_loop(void *params) {
+    float tmp_altitude = 0.0;
+    int32_t tmp_latitude = 0;
+    int32_t tmp_longitude = 0;
     while (1) {
         switch (state) {
             case (IDLE): {
                 Heltec.display->clear();
                 char buff[40];
 
-                sprintf(buff, "Lat: %i", latitude);
+                if (xSemaphoreTake(mutex_gps, 0) == pdTRUE) {
+                    tmp_latitude = latitude;
+                    tmp_longitude = longitude;
+                    Serial.print(latitude);
+                    Serial.print(", ");
+                    Serial.print(longitude);
+                    xSemaphoreGive(mutex_gps);
+                }
+
+                sprintf(buff, "Lat: %i", tmp_latitude);
                 Heltec.display->drawString(0, 0, buff);
 
-                sprintf(buff, "Long: %i", longitude);
+                sprintf(buff, "Long: %i", tmp_longitude);
                 Heltec.display->drawString(0, 10, buff);
 
                 if (xSemaphoreTake(mutex, 0) == pdTRUE) {
-                    sprintf(buff, "Altitude: %.2f m", altitude);
-                    Heltec.display->drawString(0, 20, buff);
-                    sprintf(buff, "Acc: %.1f,%.1f,%.1f m/s/s", acc_x, acc_y, acc_z);
-                    Heltec.display->drawString(0, 30, buff);
+                    tmp_altitude = altitude;
                     xSemaphoreGive(mutex);
                 }
+
+                sprintf(buff, "Altitude: %.2f m", tmp_altitude);
+                Heltec.display->drawString(0, 20, buff);
 
                 // sprintf(
                 //     buff,
@@ -127,46 +139,28 @@ void lora_task(void *params) {
                 Heltec.display->display();  // display all the above display calls
 
                 // Check if rocket should be armed
-                // if (check_if_armed()) {
-                //     // Serial.println("STATUS CHANGE - ARMED");
-                //     state = ARMED;
-                //     Heltec.display->clear();
-                // } else {
-                //     if (millis() - lastSendTime > interval) {
-                //         lastSendTime = millis();
-                //         interval = random(2000) + 1000;  // 1-3 seconds    // Reset last send time
-                //         sendPacket("IDLE");
-                //     }
-                // }
+                if (check_if_armed()) {
+                    // Serial.println("STATUS CHANGE - ARMED");
+                    state = ARMED;
+                    Heltec.display->clear();
+                } else {
+                    if (millis() - lastSendTime > interval) {
+                        lastSendTime = millis();
+                        interval = random(2000) + 1000;  // 1-3 seconds    // Reset last send time
+                        sendPacket("IDLE");
+                    }
+                }
+                vTaskDelay(50 / portTICK_PERIOD_MS);
                 break;
             }
 
             case (ARMED): {
                 sendPacket("ARMD");
-                char buff[40];
-
-                // Read pressure sensor (float)
-                // if (!bmp.performReading()) {
-                //     return;
-                // }
-
-                // Read time of flight sensor
-                uint16_t tof_data = 0;  // unimplemented
-
-                // read IMU
-                // magnetometer->getEvent(&mag_event);
-                // gyroscope->getEvent(&gyro_event);
-                // accelerometer->getEvent(&accel_event);
-
-                // Store BMP data
-                // float temptemperature = bmp.temperature;
-                // float temppressure = bmp.pressure;
-                // float tempaltitude = bmp.readAltitude(SEALEVELPRESSURE_HPA);
 
                 // Send all sensor data over LoRa
                 LoRa.beginPacket();
                 LoRa.setTxPower(20, RF_PACONFIG_PASELECT_PABOOST);
-                LoRa.write((uint8_t)tof_data);
+                LoRa.write((uint8_t)0);
                 LoRa.write((uint8_t *)&temperature, 4);
                 LoRa.write((uint8_t *)&pressure, 4);
                 LoRa.write((uint8_t *)&altitude, 4);
@@ -255,20 +249,21 @@ void lora_task(void *params) {
                 break;
             }
         }
-        vTaskDelay(50 / portTICK_PERIOD_MS);
+        // vTaskDelay(50 / portTICK_PERIOD_MS);
         counter++;
     }
 }
 
+// read from sensors and update values
 void sensor_task(void *params) {
+    char data_buff[100];
     while (1) {
         if (state != CLI) {
-            led_flag = 1 ^ led_flag;
-            digitalWrite(LED_BUILTIN, led_flag);
-
-            // char data_buff[50];
-
             if (xSemaphoreTake(mutex, 0) == pdTRUE) {
+                // LED heartbeat
+                led_flag = 1 ^ led_flag;
+                digitalWrite(LED_BUILTIN, led_flag);
+
                 // Read pressure sensor
                 if (!bmp.performReading()) {
                     return;
@@ -293,6 +288,23 @@ void sensor_task(void *params) {
                 mag_y = mag_event.magnetic.y;
                 mag_z = mag_event.magnetic.z;
 
+                char data_fmt[] = "%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n";
+                sprintf(data_buff, data_fmt,
+                        0,
+                        temperature,
+                        pressure,
+                        altitude,
+                        acc_x,
+                        acc_y,
+                        acc_z,
+                        gyro_x,
+                        gyro_y,
+                        gyro_z,
+                        mag_x,
+                        mag_y,
+                        mag_z);
+                // Serial.print(data_buff);
+
                 xSemaphoreGive(mutex);
 
                 vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -303,13 +315,17 @@ void sensor_task(void *params) {
     }
 }
 
-// void gps_task(void *params) {
-//     xSemaphoreTake(mutex_gps, portMAX_DELAY);
-//     latitude = myGPS.getLatitude();
-//     longitude = myGPS.getLongitude();
-//     xSemaphoreGive(mutex_gps);
-//     vTaskDelay(3000 / portTICK_PERIOD_MS);
-// }
+// get latitude and longitude from GPS
+void gps_task(void *params) {
+    while (true) {
+        if (xSemaphoreTake(mutex_gps, 0) == pdTRUE) {
+            latitude = myGPS.getLatitude();
+            longitude = myGPS.getLongitude();
+            xSemaphoreGive(mutex_gps);
+            // vTaskDelay(1000 / portTICK_PERIOD_MS);
+        }
+    }
+}
 
 void setup(void) {
     // Start Heltec LoRa ESP32 Board
@@ -362,7 +378,7 @@ void setup(void) {
 
     // Set the I2C port to output UBX only (turn off NMEA noise)
     myGPS.setI2COutput(COM_TYPE_UBX);
-    myGPS.enableDebugging();
+    // myGPS.enableDebugging();
 
     // Initialize BMP388 pressure sensor
     if (!bmp.begin_I2C(0x77, &I2CBUS)) {
@@ -400,11 +416,6 @@ void setup(void) {
         Heltec.display->display();
     }
 
-    // Print out sensor information
-    // accelerometer->printSensorDetails();
-    // gyroscope->printSensorDetails();
-    // magnetometer->printSensorDetails();
-
     setup_sensors();
 
     Wire.setClock(400000);  // 400KHz
@@ -415,13 +426,14 @@ void setup(void) {
         return;
     }
 
+    // declare mutexes
     mutex = xSemaphoreCreateMutex();
     mutex_gps = xSemaphoreCreateMutex();
 
     // create task for LoRa communication
     xTaskCreate(
-        lora_task,    // function
-        "LoRa task",  // task name
+        main_loop,    // function
+        "Main loop",  // task name
         4096,         // stack size
         NULL,         // task parameters
         1,            // task priority
@@ -432,21 +444,21 @@ void setup(void) {
     xTaskCreate(
         sensor_task,    // function
         "Sensor task",  // task name
-        4048,           // stack size
+        4096,           // stack size
         NULL,           // task parameters
         1,              // task priority
         NULL            // task handle
     );
 
     // Create a task for reading from the GPS
-    // xTaskCreate(
-    //     gps_task,    // function
-    //     "GPS task",  // task name
-    //     4048,        // stack size
-    //     NULL,        // task parameters
-    //     1,           // task priority
-    //     NULL         // task handle
-    // );
+    xTaskCreate(
+        gps_task,    // function
+        "GPS task",  // task name
+        4096,        // stack size
+        NULL,        // task parameters
+        1,           // task priority
+        NULL         // task handle
+    );
 }
 
 void loop() {}
