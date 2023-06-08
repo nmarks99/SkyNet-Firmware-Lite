@@ -8,7 +8,7 @@ enum RocketState {
 };
 
 // initial state to IDLE
-RocketState state = ARMED;
+RocketState state = IDLE;
 
 // Declare sensor objects
 Adafruit_BMP3XX bmp;
@@ -34,8 +34,6 @@ long lastSendTime = 0;  // last send time
 int interval = 2000;    // interval between sends
 bool led_flag = 0;
 
-float altitude_zero = 0.0;
-
 // Global variables to store sensor data
 volatile float pressure = 0.0;
 volatile float temperature = 0.0;
@@ -52,6 +50,8 @@ volatile float mag_z = 0.0;
 volatile int32_t latitude = 0;
 volatile int32_t longitude = 0;
 
+float altitude_zero = 0.0;  // used to zero the altitude at ground level
+
 static SemaphoreHandle_t mutex;
 static SemaphoreHandle_t mutex_gps;
 
@@ -65,8 +65,8 @@ bool check_if_armed() {
         while (LoRa.available()) {
             packet += (char)LoRa.read();
         }
-        Serial.print("Incoming LoRa Packet: ");
-        Serial.println(packet);
+        // Serial.print("Incoming LoRa Packet: ");
+        // Serial.println(packet);
 
         // Check if packet starts with SA (Switchstate Armed)
         if (packet.startsWith("SA")) {
@@ -78,8 +78,8 @@ bool check_if_armed() {
             SEALEVELPRESSURE_HPA = pressure.toInt();
 
             // Print out the new SEALEVELPRESSURE_HPA
-            Serial.print("New SEALEVELPRESSURE_HPA: ");
-            Serial.println(SEALEVELPRESSURE_HPA);
+            // Serial.print("New SEALEVELPRESSURE_HPA: ");
+            // Serial.println(SEALEVELPRESSURE_HPA);
 
             return true;
         }
@@ -155,10 +155,14 @@ void main_loop(void *params) {
                 // Check if rocket should be armed
                 if (check_if_armed()) {
                     // Serial.println("STATUS CHANGE - ARMED");
-                    // Heltec.display->clear();
-                    Heltec.display->displayOff();
-                    sendPacket("ARMD");
                     altitude_zero = tmp_altitude;
+                    sprintf(buff, "Zero Altitude = %f", altitude_zero);
+                    Heltec.display->clear();
+                    Heltec.display->drawString(0, 0, "ARMED");
+                    Heltec.display->drawString(0, 20, buff);
+                    Heltec.display->display();
+                    // Heltec.display->displayOff();
+                    sendPacket("ARMD");
                     state = ARMED;
                 } else {
                     if (millis() - lastSendTime > interval) {
@@ -174,9 +178,9 @@ void main_loop(void *params) {
             case (ARMED): {
                 bool new_data = false;
                 if (xSemaphoreTake(mutex, 0) == pdTRUE) {
-                    tmp_altitude = std::abs(altitude - altitude_zero);
                     tmp_temperature = temperature;
-                    tmp_altitude = altitude;
+                    tmp_pressure = pressure;
+                    tmp_altitude = std::abs(altitude - altitude_zero);
                     tmp_acc_x = acc_x;
                     tmp_acc_y = acc_y;
                     tmp_acc_z = acc_z;
@@ -195,18 +199,18 @@ void main_loop(void *params) {
                     LoRa.beginPacket();
                     LoRa.setTxPower(20, RF_PACONFIG_PASELECT_PABOOST);
                     LoRa.write((uint8_t)0);
-                    LoRa.write((uint8_t *)&temperature, 4);
-                    LoRa.write((uint8_t *)&pressure, 4);
-                    LoRa.write((uint8_t *)&altitude, 4);
-                    LoRa.write((uint8_t *)&acc_x, 4);
-                    LoRa.write((uint8_t *)&acc_y, 4);
-                    LoRa.write((uint8_t *)&acc_z, 4);
-                    LoRa.write((uint8_t *)&gyro_x, 4);
-                    LoRa.write((uint8_t *)&gyro_y, 4);
-                    LoRa.write((uint8_t *)&gyro_z, 4);
-                    LoRa.write((uint8_t *)&mag_x, 4);
-                    LoRa.write((uint8_t *)&mag_y, 4);
-                    LoRa.write((uint8_t *)&mag_z, 4);
+                    LoRa.write((uint8_t *)&tmp_temperature, 4);
+                    LoRa.write((uint8_t *)&tmp_pressure, 4);
+                    LoRa.write((uint8_t *)&tmp_altitude, 4);
+                    LoRa.write((uint8_t *)&tmp_acc_x, 4);
+                    LoRa.write((uint8_t *)&tmp_acc_y, 4);
+                    LoRa.write((uint8_t *)&tmp_acc_z, 4);
+                    LoRa.write((uint8_t *)&tmp_gyro_x, 4);
+                    LoRa.write((uint8_t *)&tmp_gyro_y, 4);
+                    LoRa.write((uint8_t *)&tmp_gyro_z, 4);
+                    LoRa.write((uint8_t *)&tmp_mag_x, 4);
+                    LoRa.write((uint8_t *)&tmp_mag_y, 4);
+                    LoRa.write((uint8_t *)&tmp_mag_z, 4);
                     LoRa.endPacket();
                 }
                 vTaskDelay(10 / portTICK_PERIOD_MS);
