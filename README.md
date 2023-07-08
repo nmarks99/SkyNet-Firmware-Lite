@@ -5,7 +5,8 @@ later on. This code was flown in SkyNet's first and only test flight in June 202
 
 First, take a look at the GitHub Wiki Charles Zhou made [here](https://github.com/NUSTARS/SkyNet/wiki).
 It gives a pretty good summary of the project, however my fork here is somewhat difference, hence 
-this README. I will go ahead and give my own summary of SkyNet here as well.
+this README. I will go ahead and give my own summary of SkyNet here as well. Feel free to get in 
+touch with me if you have any questions!
 
 ## Hardware
 SkyNet is a hardware/software system designed to stream real time data from a rocket during flight
@@ -17,9 +18,9 @@ our current setup, we haven't gotten it to be able to send data any faster than 
 The hardware is composed of a [Heltec WiFi LoRa 32 V2](https://heltec.org/project/wifi-lora-32/)
 which is an ESP32 based microcontroller, and a [BerryGPS-IMU V4](https://ozzmaker.com/product/berrygps-imu/).
 It also has a time-of-flight sensor which was originally intended to be used to detect separation
-of the rocket but I think alternative methods should be considered. These components are mounted a
+of the rocket but I think alternative methods should be considered. These components are mounted on a
 custom PCB and make up the transmitter board that goes in the rocket. Another Heltec board is used as
-the receiver board and plugs into a laptop on the ground.
+a receiver board and plugs into a laptop on the ground.
 
 ## Software
 The main goal of the software originally was to simply read the sensors on the BerryGPS-IMU board
@@ -34,7 +35,7 @@ cross-platform JavaScript application: [SkyNet Groundstation](https://github.com
 however it needs some work. The key thing to note here is that at the most basic level, all the 
 groundstation is doing is reading data over the serial port and displaying it. We have struggled
 to find people with JavaScript experience (we picked JS in the first place because it can make
-very pretty GUIs) so if you can find some other tool or what to write something up in a different
+very pretty GUIs) so if you can find some other tool or want to code something up in a different
 language to display the data, have at it.
 
 As I said, the above was the *original* goal. Later on we determined that there are some additional
@@ -48,11 +49,11 @@ The ESP32 is a dual-core chip, so it can run two processes in parallel. Furtherm
 has great FreeRTOS support which enables many *tasks* to run at once, even more than one per core
 and all the timing is handled under the hood by FreeRTOS. What this means in practice here is that
 you can have mulitple tasks (which are simply implemented as functions) running at different
-rates. What I have attempted to implement in this code here involves 3 FreeRTOS tasks which
-update variables which are implemented as FreeRTOS semaphores. Semaphores are like mutexes
+rates. What I have attempted to implement in this repo here involves 3 FreeRTOS tasks which
+update variables which are FreeRTOS semaphores. Semaphores are like mutexes
 and I'm not totally sure of the distinction, however the purpose is to enable different 
-threads to access shared data without running into race conditions (when two processes attempt
-to access the same piece of memory at the same time). 
+threads to access shared data without running into race conditions (race conditions are 
+when two processes attempt to access the same piece of memory at the same time). 
 
 One task is responsible for sending the data over LoRa to the groundstation. The speed bottleneck
 on this task is the LoRa transmission rate, which for the data we are sending now is seemingly 2Hz. 
@@ -62,7 +63,7 @@ all that fast and is only really useful when the rocket has landed anyway. The l
 to read the rest of the sensor data over I2C very fast (comparatively, so maybe 50Hz?) and save it
 to onboard flash memory. This is fully implemented in the code using SPIFFS, however I have found
 that once the size of the file gets large, the saving of the data slows down significantly, and
-worse sometimes it crashes. During our test flight, we did not save the data to onboard flash.
+worse, sometimes it crashes. During our test flight, we did not save the data to onboard flash.
 I believe if instead of onboard flash, we used an SD card module, saving the data could be faster,
 or alternatively you could look into some alteratnive method for saving data other than SPIFFS.
 
@@ -84,5 +85,11 @@ Most people use it as a vscode extension, although if you prefer it is also avai
 CLI tool (PlatformIO Core). There are lots of tutorials and examples online of how to use
 platformio with Arduino if you need help.
 
+One last note: when working with multiple threads in FreeRTOS, it can be hard to debug because
+most things you could do wrong in code will result in the board continually resetting. This can
+be caused by many things such as not using semaphores correctly/when needed. Other common issues
+could be not allocating enough stack memory to a task, or forgetting to put a vTaskDelay somewhere
+in your task to prevent the task from running at "full speed" and hogging all the resources and
+or trigging the watchdog timer. Good luck!
 
 
